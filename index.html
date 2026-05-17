@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
-    <title>A股交易分析 | 动态成本 · 现价更新有效</title>
+    <title>A股交易分析 | 动态成本 · 数据持久化</title>
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { background: #f5f7fb; font-family: system-ui, -apple-system, 'Segoe UI', Helvetica, sans-serif; margin: 0; padding: 12px 8px 32px; color: #1e293b; }
@@ -135,10 +135,10 @@
         <div class="card" style="margin-top:0;">
             <div class="card-title">股票交易统计（仅交易记录）</div>
             <div class="table-wrapper">
-                <tr>
+                <table>
                     <thead><tr><th>代码</th><th>名称</th><th>总买入</th><th>总卖出</th><th>已匹配</th><th>未匹配净头寸</th><th>实现盈亏</th></thead>
-                    <tbody id="statTbody"></td><td colspan="7">暂无数据</tbody>
-                六十
+                    <tbody id="statTbody"><tr><td colspan="7">暂无数据</tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -148,10 +148,10 @@
         <div class="card" style="margin-top:0;">
             <div class="card-title">交易明细</div>
             <div class="table-wrapper">
-                <table>
+                <tr>
                     <thead><tr><th>代码</th><th>名称</th><th>方向</th><th>价格</th><th>数量</th><th>日期</th><th></th></thead>
                     <tbody id="tradeTbody"><tr><td colspan="7">暂无交易</tbody>
-                六十
+                </table>
             </div>
             <div class="flex-between">
                 <button id="clearAllTrades" class="btn-outline btn-sm">🗑️ 清空交易</button>
@@ -167,11 +167,7 @@
         <div class="small-text" style="margin-top:8px;">点击按钮查看每日、每月、每年收益（仅已实现盈亏）</div>
     </div>
 
-    <!-- 底部 GitHub 按钮 -->
-    <div class="footer-note">
-        <button id="genGitBtn" class="btn-outline" style="background:#1f2937; color:white;">🚀 生成 GitHub 地址</button>
-        <div id="gitUrlDisplay" style="margin-top:8px;"></div>
-    </div>
+    <!-- 底部无任何按钮（已删除GitHub地址生成） -->
 </div>
 
 <!-- 设置模态框 -->
@@ -244,6 +240,47 @@
     let stockPrices = {};
     let stockNames = {};
 
+    // ---------- localStorage 存储 ----------
+    const STORAGE_KEYS = {
+        TRADES: 'astock_trades',
+        HOLD_POSITIONS: 'astock_holdPositions',
+        STOCK_PRICES: 'astock_stockPrices',
+        STOCK_NAMES: 'astock_stockNames',
+        SETTINGS: 'astock_settings'
+    };
+
+    function saveToLocalStorage() {
+        try {
+            localStorage.setItem(STORAGE_KEYS.TRADES, JSON.stringify(trades));
+            localStorage.setItem(STORAGE_KEYS.HOLD_POSITIONS, JSON.stringify(holdPositions));
+            localStorage.setItem(STORAGE_KEYS.STOCK_PRICES, JSON.stringify(stockPrices));
+            localStorage.setItem(STORAGE_KEYS.STOCK_NAMES, JSON.stringify(stockNames));
+            localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+        } catch(e) { console.warn('保存失败', e); }
+    }
+
+    function loadFromLocalStorage() {
+        try {
+            const savedTrades = localStorage.getItem(STORAGE_KEYS.TRADES);
+            if (savedTrades) trades = JSON.parse(savedTrades);
+            const savedHold = localStorage.getItem(STORAGE_KEYS.HOLD_POSITIONS);
+            if (savedHold) holdPositions = JSON.parse(savedHold);
+            const savedPrices = localStorage.getItem(STORAGE_KEYS.STOCK_PRICES);
+            if (savedPrices) stockPrices = JSON.parse(savedPrices);
+            const savedNames = localStorage.getItem(STORAGE_KEYS.STOCK_NAMES);
+            if (savedNames) stockNames = JSON.parse(savedNames);
+            const savedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+            if (savedSettings) settings = JSON.parse(savedSettings);
+        } catch(e) { console.warn('读取失败', e); }
+    }
+
+    // 在每次数据变更后调用保存
+    function persistAndRefresh() {
+        saveToLocalStorage();
+        refreshUI();
+    }
+
+    // 费用计算
     function calcTradeFee(price, quantity, side, commissionRate, stampTaxRate, minCommission) {
         const turnover = price * quantity;
         let commission = turnover * (commissionRate / 100);
@@ -252,6 +289,7 @@
         return { commission, stamp, totalFee: commission + stamp };
     }
 
+    // 东方财富获取
     async function fetchEastMoney(code) {
         try {
             const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${code.startsWith('6')?'1':'0'}.${code}&fields=f43,f57,f58`;
@@ -266,6 +304,7 @@
         } catch(e) { return null; }
     }
 
+    // 核心计算
     function computeAll() {
         settings.initialCash = parseFloat(document.getElementById('initialCash').value) || 0;
         settings.commissionRate = parseFloat(document.getElementById('commissionRate').value) || 0;
@@ -413,7 +452,8 @@
         else {
             posTbody.innerHTML = positionRows.map(p => `
                 <tr>
-                    <td>${p.code}</td><td>${p.name}</td>
+                    <td>${p.code}</td>
+                    <td>${p.name}</td>
                     <td class="${p.netQty>0?'profit':(p.netQty<0?'loss':'')}">${p.netQty}</td>
                     <td>${p.avgCost.toFixed(2)}</td>
                     <td>${p.curPrice.toFixed(2)}</td>
@@ -425,11 +465,12 @@
         }
 
         let statTbody = document.getElementById('statTbody');
-        if (statRows.length === 0) statTbody.innerHTML = '<td><td colspan="7">暂无数据</tbody>';
+        if (statRows.length === 0) statTbody.innerHTML = '<tr><td colspan="7">暂无数据</tbody>';
         else {
             statTbody.innerHTML = statRows.map(s => `
                 <tr>
-                    <td>${s.code}</td><td>${s.name}</td>
+                    <td>${s.code}</td>
+                    <td>${s.name}</td>
                     <td>${s.totalBuy}</td>
                     <td>${s.totalSell}</td>
                     <td>${s.matchedQty}</td>
@@ -548,9 +589,9 @@
     }
     function closePeriodModal() { document.getElementById('periodModal').classList.remove('active'); }
 
-    // 辅助函数
-    window.deleteTrade = (idx) => { trades.splice(idx, 1); refreshUI(); };
-    function deleteHoldPosition(idx) { holdPositions.splice(idx, 1); refreshUI(); }
+    // 辅助函数（带存储）
+    window.deleteTrade = (idx) => { trades.splice(idx, 1); persistAndRefresh(); };
+    function deleteHoldPosition(idx) { holdPositions.splice(idx, 1); persistAndRefresh(); }
     function updateInitPositionTable() {
         let tbody = document.getElementById('initPositionTbody');
         if (holdPositions.length===0) tbody.innerHTML = '<td><td colspan="7">暂无底仓</tbody>';
@@ -574,7 +615,9 @@
             holdPositions = [];
             stockPrices = {};
             stockNames = {};
-            refreshUI();
+            // 同时清除 localStorage
+            for (let key of Object.values(STORAGE_KEYS)) localStorage.removeItem(key);
+            persistAndRefresh();
             updateInitPositionTable();
         }
     }
@@ -598,7 +641,7 @@
         }
         btn.innerText = originalText;
         btn.classList.remove('loading');
-        refreshUI();
+        persistAndRefresh();
         alert(`成功更新 ${successCount}/${codes.length} 只股票现价`);
     }
 
@@ -610,7 +653,10 @@
     document.getElementById('closeModalBtn').addEventListener('click',()=>{
         document.getElementById('settingsModal').classList.remove('active');
     });
-    document.getElementById('applySettingsBtn').addEventListener('click',()=>refreshUI());
+    document.getElementById('applySettingsBtn').addEventListener('click',()=>{
+        // 应用费率后保存设置
+        persistAndRefresh();
+    });
     document.getElementById('addInitPositionBtn').addEventListener('click',()=>{
         let code = document.getElementById('initCode').value.trim();
         let name = document.getElementById('initName').value.trim();
@@ -620,7 +666,7 @@
         let date = document.getElementById('initDate').value;
         if (!code || isNaN(qty) || isNaN(price) || !date) { alert('请完整填写底仓信息'); return; }
         holdPositions.push({ stockCode:code, stockName:name||code, side, quantity:qty, price, openDate:date });
-        refreshUI();
+        persistAndRefresh();
         updateInitPositionTable();
     });
     document.getElementById('addTradeBtn').addEventListener('click', async ()=>{
@@ -640,9 +686,9 @@
             } catch(e) { name = code; }
         }
         trades.push({ id:Date.now(), stockCode:code, stockName:name, side, price, quantity:qty, date });
-        refreshUI();
+        persistAndRefresh();
     });
-    document.getElementById('clearAllTrades').addEventListener('click',()=>{ trades=[]; refreshUI(); });
+    document.getElementById('clearAllTrades').addEventListener('click',()=>{ trades=[]; persistAndRefresh(); });
     document.getElementById('resetAllData').addEventListener('click', resetAll);
     document.getElementById('updateAllPricesBtn').addEventListener('click', updateAllStockPrices);
     document.getElementById('fetchNameOnlyBtn').addEventListener('click', async ()=>{
@@ -651,9 +697,6 @@
         let res = await fetchEastMoney(code);
         if(res && res.name) document.getElementById('stockName').value = res.name;
         else alert('获取名称失败');
-    });
-    document.getElementById('genGitBtn').addEventListener('click',()=>{
-        document.getElementById('gitUrlDisplay').innerHTML = `<a href="https://github.com/yourname/astock-trade-analyzer" target="_blank">📦 GitHub 项目仓库</a> | 底仓独立 · 动态成本 · 一键更新股价`;
     });
     document.getElementById('openPeriodModalBtn').addEventListener('click', openPeriodModal);
     document.getElementById('closePeriodModalBtn').addEventListener('click', closePeriodModal);
@@ -673,7 +716,15 @@
         });
     });
 
+    // 初始化：从 localStorage 加载数据，然后刷新界面
+    loadFromLocalStorage();
+    // 同步设置到输入框
+    document.getElementById('initialCash').value = settings.initialCash;
+    document.getElementById('commissionRate').value = settings.commissionRate;
+    document.getElementById('stampTaxRate').value = settings.stampTaxRate;
+    document.getElementById('minCommission').value = settings.minCommission;
     refreshUI();
+    updateInitPositionTable();
 </script>
 </body>
 </html>
