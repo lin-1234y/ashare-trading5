@@ -1,0 +1,679 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes">
+    <title>A股交易分析 | 动态成本 · 现价更新有效</title>
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { background: #f5f7fb; font-family: system-ui, -apple-system, 'Segoe UI', Helvetica, sans-serif; margin: 0; padding: 12px 8px 32px; color: #1e293b; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .card { background: white; border-radius: 20px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.02), 0 1px 2px rgba(0,0,0,0.05); }
+        .card-title { font-weight: 600; font-size: 17px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; border-left: 3px solid #3b82f6; padding-left: 10px; }
+        .badge { background: #eef2ff; color: #1e40af; font-size: 11px; padding: 4px 8px; border-radius: 20px; }
+        .form-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; align-items: flex-end; }
+        .form-group { flex: 1; min-width: 100px; }
+        .form-group label { font-size: 12px; font-weight: 500; color: #475569; display: block; margin-bottom: 4px; }
+        input, select, button { font-size: 14px; border-radius: 12px; border: 1px solid #e2e8f0; padding: 8px 10px; width: 100%; background: #ffffff; font-family: inherit; }
+        button { background: #3b82f6; color: white; font-weight: 600; border: none; cursor: pointer; transition: 0.1s; }
+        button:active { background: #2563eb; transform: scale(0.97); }
+        .btn-outline { background: white; border: 1px solid #cbd5e1; color: #1e293b; }
+        .btn-danger { background: #ef4444; }
+        .btn-sm { padding: 6px 8px; font-size: 12px; }
+        .table-wrapper { overflow-x: auto; margin: 10px 0; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 580px; }
+        th, td { padding: 8px 5px; text-align: left; border-bottom: 1px solid #eef2f6; }
+        th { font-weight: 600; color: #334155; }
+        .profit { color: #10b981; font-weight: 500; }
+        .loss { color: #ef4444; font-weight: 500; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .total-assets { background: #0f172a; color: white; border-radius: 24px; padding: 12px 16px; margin-bottom: 16px; }
+        .total-assets .number { font-size: 22px; font-weight: 700; }
+        hr { margin: 12px 0; border: none; border-top: 1px solid #eef2f6; }
+        .footer-note { text-align: center; font-size: 11px; color: #94a3b8; margin-top: 20px; }
+        .delete-icon { color: #ef4444; background: none; border: none; font-size: 16px; cursor: pointer; padding: 0 4px; }
+        .tabs { display: flex; background: white; border-radius: 40px; margin-bottom: 12px; padding: 4px; gap: 4px; }
+        .tab-btn { flex: 1; text-align: center; background: #f1f5f9; border: none; border-radius: 32px; padding: 8px 0; font-weight: 500; color: #475569; transition: 0.2s; }
+        .tab-btn.active { background: #3b82f6; color: white; }
+        .tab-pane { display: none; }
+        .tab-pane.active { display: block; }
+        .modal-mask { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; visibility: hidden; opacity: 0; transition: 0.2s; }
+        .modal-mask.active { visibility: visible; opacity: 1; }
+        .modal-container { background: white; width: 90%; max-width: 500px; max-height: 85%; border-radius: 28px; overflow-y: auto; padding: 20px; }
+        .small-text { font-size: 11px; color: #64748b; }
+        .loading { opacity: 0.6; pointer-events: none; }
+        .stock-detail { margin-top: 12px; border-top: 1px solid #eef2f6; padding-top: 8px; }
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .calendar-month { font-weight: 600; font-size: 16px; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+        .calendar-weekday { font-size: 12px; font-weight: 500; color: #64748b; padding: 6px 0; }
+        .calendar-day { background: #f8fafc; border-radius: 12px; padding: 8px 0; font-size: 12px; cursor: pointer; transition: 0.1s; }
+        .calendar-day.empty { background: transparent; cursor: default; }
+        .calendar-day.today { background: #3b82f6; color: white; }
+        .calendar-day .day-profit { font-size: 10px; font-weight: 500; margin-top: 2px; }
+        .calendar-day .profit { color: #10b981; }
+        .calendar-day .loss { color: #ef4444; }
+        .calendar-summary { background: #f1f5f9; border-radius: 16px; padding: 10px; margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- 顶部资产栏 -->
+    <div class="total-assets">
+        <div class="flex-between">
+            <span>💰 现金资产</span>
+            <span class="number" id="displayCash">0.00</span>
+            <button id="openSettingsBtn" style="background: none; border: none; color: white; font-size: 20px; width: auto; padding: 0;">⚙️</button>
+        </div>
+        <div class="flex-between" style="margin-top: 8px;">
+            <button id="updateAllPricesBtn" class="btn-sm" style="background:#2563eb; width: auto; flex:1;">🔄 更新所有持仓股价</button>
+            <span class="small-text" style="color:#9ca3af;">一键获取最新现价</span>
+        </div>
+        <div class="flex-between" style="margin-top: 6px;">
+            <span>📦 持仓市值</span>
+            <span class="number" id="displayMarketValue">0.00</span>
+        </div>
+        <div class="flex-between" style="margin-top: 6px;">
+            <span>📊 总资产</span>
+            <span class="number" id="displayTotalAssets">0.00</span>
+        </div>
+        <div class="flex-between" style="margin-top: 6px;">
+            <span>✅ 已实现盈亏</span>
+            <span class="number" id="displayRealizedPL">0.00</span>
+        </div>
+        <div class="flex-between" style="margin-top: 8px; border-top: 1px solid #334155; padding-top: 6px;">
+            <span>📈 浮动盈亏</span>
+            <span id="displayFloatPL">0.00</span>
+        </div>
+        <div class="small-text" style="margin-top: 6px; color: #9ca3af;">💡 底仓永不参与配对，交易匹配仅基于交易记录</div>
+    </div>
+
+    <!-- 新增交易卡片 -->
+    <div class="card">
+        <div class="card-title">📝 新增交易</div>
+        <div class="form-row">
+            <div class="form-group"><label>代码</label><input type="text" id="stockCode" value="600519"></div>
+            <div class="form-group"><label>名称</label><input type="text" id="stockName" placeholder="手动或自动获取"></div>
+            <div class="form-group"><label>方向</label><select id="tradeSide"><option value="buy">买入</option><option value="sell">卖出</option></select></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>价格(¥)</label><input type="number" id="tradePrice" step="0.01" value="1850"></div>
+            <div class="form-group"><label>数量(股)</label><input type="number" id="tradeQty" step="100" value="100"></div>
+            <div class="form-group"><label>日期时间</label><input type="datetime-local" id="tradeDate"></div>
+            <div class="form-group"><button id="addTradeBtn">+ 添加</button></div>
+        </div>
+        <div class="flex-between">
+            <button id="fetchNameOnlyBtn" class="btn-outline btn-sm">📡 获取股票名称</button>
+            <span class="small-text">名称可手动填写，价格需手动输入</span>
+        </div>
+    </div>
+
+    <!-- 三窗口标签页 -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="position">📊 持仓</button>
+        <button class="tab-btn" data-tab="stat">📈 交易统计</button>
+        <button class="tab-btn" data-tab="log">📋 交易流水</button>
+    </div>
+
+    <!-- 持仓窗口 -->
+    <div id="positionPane" class="tab-pane active">
+        <div class="card" style="margin-top:0;">
+            <div class="card-title">当前持仓（底仓 + 交易净头寸）</div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr><th>代码</th><th>名称</th><th>净股数</th><th>成本均价</th><th>现价</th><th>市值</th><th>浮动盈亏</th><th>盈亏率</th></thead>
+                    <tbody id="positionTbody"><tr><td colspan="8">暂无持仓</tbody>
+                </table>
+            </div>
+            <div class="small-text">* 成本均价 = (累计买入金额 - 累计卖出金额) / 净股数，浮动盈亏 = 净股数 × (现价 - 成本均价)。</div>
+        </div>
+    </div>
+
+    <!-- 交易统计窗口 -->
+    <div id="statPane" class="tab-pane">
+        <div class="card" style="margin-top:0;">
+            <div class="card-title">股票交易统计（仅交易记录）</div>
+            <div class="table-wrapper">
+                <tr>
+                    <thead><tr><th>代码</th><th>名称</th><th>总买入</th><th>总卖出</th><th>已匹配</th><th>未匹配净头寸</th><th>实现盈亏</th></thead>
+                    <tbody id="statTbody"></td><td colspan="7">暂无数据</tbody>
+                六十
+            </div>
+        </div>
+    </div>
+
+    <!-- 交易流水窗口 -->
+    <div id="logPane" class="tab-pane">
+        <div class="card" style="margin-top:0;">
+            <div class="card-title">交易明细</div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>代码</th><th>名称</th><th>方向</th><th>价格</th><th>数量</th><th>日期</th><th></th></thead>
+                    <tbody id="tradeTbody"><tr><td colspan="7">暂无交易</tbody>
+                六十
+            </div>
+            <div class="flex-between">
+                <button id="clearAllTrades" class="btn-outline btn-sm">🗑️ 清空交易</button>
+                <button id="resetAllData" class="btn-danger btn-sm">⚠️ 重置全部</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 阶段收益查询卡片 -->
+    <div class="card">
+        <div class="card-title">📅 阶段收益查询</div>
+        <button id="openPeriodModalBtn" class="btn-sm" style="background:#3b82f6;">打开日历收益视图</button>
+        <div class="small-text" style="margin-top:8px;">点击按钮查看每日、每月、每年收益（仅已实现盈亏）</div>
+    </div>
+
+    <!-- 底部 GitHub 按钮 -->
+    <div class="footer-note">
+        <button id="genGitBtn" class="btn-outline" style="background:#1f2937; color:white;">🚀 生成 GitHub 地址</button>
+        <div id="gitUrlDisplay" style="margin-top:8px;"></div>
+    </div>
+</div>
+
+<!-- 设置模态框 -->
+<div id="settingsModal" class="modal-mask">
+    <div class="modal-container">
+        <div class="flex-between" style="margin-bottom:16px;">
+            <span style="font-size:18px; font-weight:600;">⚙️ 设置</span>
+            <button class="close-modal" id="closeModalBtn" style="background:none; border:none; font-size:24px;">&times;</button>
+        </div>
+        <div class="card" style="margin:0; padding:0 0 12px 0; box-shadow:none;">
+            <div class="card-title">费率参数</div>
+            <div class="form-row">
+                <div class="form-group"><label>底仓现金(¥)</label><input type="number" id="initialCash" value="100000"></div>
+                <div class="form-group"><label>佣金(%)</label><input type="number" id="commissionRate" value="0.01345" step="0.000001"></div>
+                <div class="form-group"><label>印花税(%)</label><input type="number" id="stampTaxRate" value="0.05" step="0.000001"></div>
+                <div class="form-group"><label>最低佣金(¥)</label><input type="number" id="minCommission" value="5"></div>
+            </div>
+            <button id="applySettingsBtn" class="btn-sm">应用费率</button>
+        </div>
+        <hr>
+        <div class="card-title">🏦 原始底仓 (永不参与交易配对)</div>
+        <div class="form-row">
+            <div class="form-group"><label>代码</label><input type="text" id="initCode" placeholder="600519"></div>
+            <div class="form-group"><label>名称</label><input type="text" id="initName" placeholder="贵州茅台"></div>
+            <div class="form-group"><label>方向</label><select id="initSide"><option value="long">多头</option><option value="short">空头</option></select></div>
+        </div>
+        <div class="form-row">
+            <div class="form-group"><label>数量</label><input type="number" id="initQty" value="100"></div>
+            <div class="form-group"><label>开仓价(¥)</label><input type="number" id="initPrice" step="0.01" value="1800"></div>
+            <div class="form-group"><label>开仓日期</label><input type="date" id="initDate" value="2025-01-01"></div>
+            <div class="form-group"><button id="addInitPositionBtn">➕ 添加底仓</button></div>
+        </div>
+        <div class="table-wrapper">
+            <table id="initPositionTable">
+                <thead><tr><th>代码</th><th>名称</th><th>方向</th><th>数量</th><th>开仓价</th><th>日期</th><th></th></thead>
+                <tbody id="initPositionTbody"><tr><td colspan="7">暂无底仓</tbody>
+            </table>
+        </div>
+        <div class="small-text">* 底仓永远不被交易匹配，只影响持仓市值和浮动盈亏。</div>
+    </div>
+</div>
+
+<!-- 阶段收益查询弹窗（日历视图） -->
+<div id="periodModal" class="modal-mask">
+    <div class="modal-container">
+        <div class="flex-between" style="margin-bottom:16px;">
+            <span style="font-size:18px; font-weight:600;">📅 日历收益视图</span>
+            <button class="close-modal" id="closePeriodModalBtn" style="background:none; border:none; font-size:24px;">&times;</button>
+        </div>
+        <div class="calendar-summary">
+            <div class="flex-between"><span>📅 今日收益</span><strong id="todayPL">0.00</strong></div>
+            <div class="flex-between" style="margin-top:8px;"><span>📆 本月收益</span><strong id="monthPL">0.00</strong></div>
+            <div class="flex-between" style="margin-top:8px;"><span>📅 本年收益</span><strong id="yearPL">0.00</strong></div>
+        </div>
+        <div class="calendar-header">
+            <button id="prevMonthBtn" class="btn-sm">◀</button>
+            <span id="calendarMonthYear" class="calendar-month"></span>
+            <button id="nextMonthBtn" class="btn-sm">▶</button>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+        <div class="small-text" style="margin-top:12px;">💡 点击任意日期可查看当天详细交易记录</div>
+    </div>
+</div>
+
+<script>
+    // ---------- 数据 ----------
+    let trades = [];
+    let holdPositions = [];
+    let settings = { initialCash: 100000, commissionRate: 0.01345, stampTaxRate: 0.05, minCommission: 5 };
+    let stockPrices = {};
+    let stockNames = {};
+
+    function calcTradeFee(price, quantity, side, commissionRate, stampTaxRate, minCommission) {
+        const turnover = price * quantity;
+        let commission = turnover * (commissionRate / 100);
+        if (commission < minCommission) commission = minCommission;
+        let stamp = (side === 'sell') ? turnover * (stampTaxRate / 100) : 0;
+        return { commission, stamp, totalFee: commission + stamp };
+    }
+
+    async function fetchEastMoney(code) {
+        try {
+            const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${code.startsWith('6')?'1':'0'}.${code}&fields=f43,f57,f58`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            if (data && data.data) {
+                let price = data.data.f43 / 100;
+                const name = data.data.f58;
+                if (price && name) return { price, name };
+            }
+            return null;
+        } catch(e) { return null; }
+    }
+
+    function computeAll() {
+        settings.initialCash = parseFloat(document.getElementById('initialCash').value) || 0;
+        settings.commissionRate = parseFloat(document.getElementById('commissionRate').value) || 0;
+        settings.stampTaxRate = parseFloat(document.getElementById('stampTaxRate').value) || 0;
+        settings.minCommission = parseFloat(document.getElementById('minCommission').value) || 0;
+
+        let sortedTrades = [...trades].sort((a,b)=> new Date(a.date) - new Date(b.date));
+        let tradesWithFee = sortedTrades.map(t => {
+            const { commission, stamp } = calcTradeFee(t.price, t.quantity, t.side, settings.commissionRate, settings.stampTaxRate, settings.minCommission);
+            return { ...t, commission, stamp, fee: t.side === 'buy' ? commission : commission + stamp };
+        });
+
+        const tradeGroups = new Map();
+        for (let t of tradesWithFee) {
+            if (!tradeGroups.has(t.stockCode)) {
+                tradeGroups.set(t.stockCode, {
+                    buyQueue: [], sellQueue: [], realizedPnl: 0, matchedQty: 0,
+                    totalBuy: 0, totalSell: 0, name: t.stockName || stockNames[t.stockCode] || t.stockCode
+                });
+            }
+            let g = tradeGroups.get(t.stockCode);
+            if (t.side === 'buy') {
+                g.totalBuy += t.quantity;
+                g.buyQueue.push({ price: t.price, qty: t.quantity, fee: t.commission, date: t.date, id: t.id });
+            } else {
+                g.totalSell += t.quantity;
+                g.sellQueue.push({ price: t.price, qty: t.quantity, fee: t.commission + t.stamp, date: t.date, id: t.id });
+            }
+        }
+
+        let realizedDetails = [];
+        for (let [code, g] of tradeGroups.entries()) {
+            let i = 0, j = 0;
+            while (i < g.buyQueue.length && j < g.sellQueue.length) {
+                let buy = g.buyQueue[i];
+                let sell = g.sellQueue[j];
+                let matchQty = Math.min(buy.qty, sell.qty);
+                let buyCost = buy.price * matchQty + (buy.fee * (matchQty / buy.qty));
+                let sellIncome = sell.price * matchQty - (sell.fee * (matchQty / sell.qty));
+                let pnl = sellIncome - buyCost;
+                g.realizedPnl += pnl;
+                g.matchedQty += matchQty;
+                realizedDetails.push({
+                    closedDate: sell.date,
+                    pnl: pnl,
+                    stockCode: code,
+                    buyPrice: buy.price,
+                    sellPrice: sell.price,
+                    qty: matchQty,
+                    buyCost: buyCost
+                });
+                buy.qty -= matchQty;
+                sell.qty -= matchQty;
+                if (buy.qty === 0) i++;
+                if (sell.qty === 0) j++;
+            }
+        }
+
+        let totalRealizedPL = 0;
+        for (let g of tradeGroups.values()) totalRealizedPL += g.realizedPnl;
+
+        let cashFlow = settings.initialCash;
+        for (let t of tradesWithFee) {
+            const turnover = t.price * t.quantity;
+            if (t.side === 'buy') cashFlow -= (turnover + t.commission);
+            else cashFlow += (turnover - t.commission - t.stamp);
+        }
+
+        // 持仓合并
+        let stockData = new Map();
+        for (let h of holdPositions) {
+            if (!stockData.has(h.stockCode)) stockData.set(h.stockCode, { buyAmount: 0, sellAmount: 0, buyQty: 0, sellQty: 0, name: h.stockName });
+            let d = stockData.get(h.stockCode);
+            if (h.side === 'long') {
+                d.buyAmount += h.price * h.quantity;
+                d.buyQty += h.quantity;
+            } else {
+                d.sellAmount += h.price * h.quantity;
+                d.sellQty += h.quantity;
+            }
+        }
+        for (let t of trades) {
+            if (!stockData.has(t.stockCode)) stockData.set(t.stockCode, { buyAmount: 0, sellAmount: 0, buyQty: 0, sellQty: 0, name: t.stockName || t.stockCode });
+            let d = stockData.get(t.stockCode);
+            if (t.side === 'buy') {
+                d.buyAmount += t.price * t.quantity;
+                d.buyQty += t.quantity;
+            } else {
+                d.sellAmount += t.price * t.quantity;
+                d.sellQty += t.quantity;
+            }
+        }
+
+        let positionRows = [];
+        let totalMarketValue = 0;
+        let totalFloatPL = 0;
+        for (let [code, d] of stockData.entries()) {
+            let netQty = d.buyQty - d.sellQty;
+            if (netQty === 0) continue;
+            let netAmount = d.buyAmount - d.sellAmount;
+            let avgCost = netAmount / netQty;
+            let curPrice = stockPrices[code];
+            if (curPrice === undefined) {
+                if (d.buyQty > 0) curPrice = netAmount / d.buyQty;
+                else if (d.sellQty > 0) curPrice = netAmount / d.sellQty;
+                else curPrice = 0;
+            }
+            let marketVal = Math.abs(netQty) * curPrice;
+            totalMarketValue += marketVal;
+            let floatPL = netQty * (curPrice - avgCost);
+            totalFloatPL += floatPL;
+            let returnRate = (avgCost !== 0) ? (floatPL / (Math.abs(netQty) * avgCost)) * 100 : 0;
+            let name = d.name || code;
+            positionRows.push({ code, name, netQty, avgCost, curPrice, marketVal, floatPL, returnRate });
+        }
+
+        let statRows = [];
+        for (let [code, g] of tradeGroups.entries()) {
+            statRows.push({
+                code, name: g.name,
+                totalBuy: g.totalBuy,
+                totalSell: g.totalSell,
+                matchedQty: g.matchedQty,
+                netPos: g.totalBuy - g.totalSell,
+                realizedPnl: g.realizedPnl
+            });
+        }
+
+        let tradeRows = trades.map((t,idx) => ({ ...t, idx }));
+        return { cashFlow, totalMarketValue, totalFloatPL, totalRealizedPL, positionRows, statRows, tradeRows, realizedDetails };
+    }
+
+    async function refreshUI() {
+        const { cashFlow, totalMarketValue, totalFloatPL, totalRealizedPL, positionRows, statRows, tradeRows, realizedDetails } = computeAll();
+        const totalAssets = cashFlow + totalMarketValue;
+        document.getElementById('displayCash').innerText = cashFlow.toFixed(2);
+        document.getElementById('displayMarketValue').innerText = totalMarketValue.toFixed(2);
+        document.getElementById('displayTotalAssets').innerText = totalAssets.toFixed(2);
+        document.getElementById('displayRealizedPL').innerHTML = `<span class="${totalRealizedPL>=0?'profit':'loss'}">${totalRealizedPL>=0?'+':''}${totalRealizedPL.toFixed(2)}</span>`;
+        let plColor = totalFloatPL>=0 ? 'profit' : 'loss';
+        document.getElementById('displayFloatPL').innerHTML = `<span class="${plColor}">${totalFloatPL>=0?'+':''}${totalFloatPL.toFixed(2)}</span>`;
+
+        let posTbody = document.getElementById('positionTbody');
+        if (positionRows.length === 0) posTbody.innerHTML = '<tr><td colspan="8">暂无持仓</tbody>';
+        else {
+            posTbody.innerHTML = positionRows.map(p => `
+                <tr>
+                    <td>${p.code}</td><td>${p.name}</td>
+                    <td class="${p.netQty>0?'profit':(p.netQty<0?'loss':'')}">${p.netQty}</td>
+                    <td>${p.avgCost.toFixed(2)}</td>
+                    <td>${p.curPrice.toFixed(2)}</td>
+                    <td>${p.marketVal.toFixed(2)}</td>
+                    <td class="${p.floatPL>=0?'profit':'loss'}">${p.floatPL>=0?'+':''}${p.floatPL.toFixed(2)}</td>
+                    <td class="${p.returnRate>=0?'profit':'loss'}">${p.returnRate>=0?'+':''}${p.returnRate.toFixed(2)}%</td>
+                </tr>
+            `).join('');
+        }
+
+        let statTbody = document.getElementById('statTbody');
+        if (statRows.length === 0) statTbody.innerHTML = '<td><td colspan="7">暂无数据</tbody>';
+        else {
+            statTbody.innerHTML = statRows.map(s => `
+                <tr>
+                    <td>${s.code}</td><td>${s.name}</td>
+                    <td>${s.totalBuy}</td>
+                    <td>${s.totalSell}</td>
+                    <td>${s.matchedQty}</td>
+                    <td class="${s.netPos>0?'profit':(s.netPos<0?'loss':'')}">${s.netPos}</td>
+                    <td class="${s.realizedPnl>=0?'profit':'loss'}">${s.realizedPnl>=0?'+':''}${s.realizedPnl.toFixed(2)}</td>
+                </tr>
+            `).join('');
+        }
+
+        let tradeTbody = document.getElementById('tradeTbody');
+        if (tradeRows.length === 0) tradeTbody.innerHTML = '<tr><td colspan="7">暂无交易</tbody>';
+        else {
+            tradeTbody.innerHTML = tradeRows.map((t, idx) => `
+                <tr>
+                    <td>${t.stockCode}</td>
+                    <td>${t.stockName||''}</td>
+                    <td>${t.side==='buy'?'买入':'卖出'}</td>
+                    <td>${t.price.toFixed(2)}</td>
+                    <td>${t.quantity}</td>
+                    <td>${new Date(t.date).toLocaleString()}</td>
+                    <td><button class="delete-icon" onclick="deleteTrade(${t.idx})">删</button></td>
+                </tr>
+            `).join('');
+        }
+
+        window.realizedDetails = realizedDetails;
+    }
+
+    // 日历相关函数
+    let currentCalendarYear = new Date().getFullYear();
+    let currentCalendarMonth = new Date().getMonth();
+
+    function getDailyPnlMap() {
+        let map = new Map();
+        let details = window.realizedDetails || [];
+        for (let d of details) {
+            let dateStr = d.closedDate.slice(0,10);
+            let current = map.get(dateStr) || 0;
+            map.set(dateStr, current + d.pnl);
+        }
+        return map;
+    }
+
+    function renderCalendar() {
+        const year = currentCalendarYear;
+        const month = currentCalendarMonth;
+        const firstDay = new Date(year, month, 1);
+        const startWeekday = firstDay.getDay();
+        const daysInMonth = new Date(year, month+1, 0).getDate();
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+        const dailyPnlMap = getDailyPnlMap();
+
+        let monthPnl = 0;
+        for (let d = 1; d <= daysInMonth; d++) {
+            let dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            monthPnl += dailyPnlMap.get(dateStr) || 0;
+        }
+        let yearPnl = 0;
+        for (let m = 0; m <= 11; m++) {
+            let daysInM = new Date(year, m+1, 0).getDate();
+            for (let d = 1; d <= daysInM; d++) {
+                let dateStr = `${year}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                yearPnl += dailyPnlMap.get(dateStr) || 0;
+            }
+        }
+        let todayPnl = dailyPnlMap.get(todayStr) || 0;
+        document.getElementById('todayPL').innerHTML = todayPnl>=0 ? `<span class="profit">+${todayPnl.toFixed(2)}</span>` : `<span class="loss">${todayPnl.toFixed(2)}</span>`;
+        document.getElementById('monthPL').innerHTML = monthPnl>=0 ? `<span class="profit">+${monthPnl.toFixed(2)}</span>` : `<span class="loss">${monthPnl.toFixed(2)}</span>`;
+        document.getElementById('yearPL').innerHTML = yearPnl>=0 ? `<span class="profit">+${yearPnl.toFixed(2)}</span>` : `<span class="loss">${yearPnl.toFixed(2)}</span>`;
+
+        document.getElementById('calendarMonthYear').innerText = `${year}年 ${month+1}月`;
+
+        const weekdays = ['日','一','二','三','四','五','六'];
+        let html = weekdays.map(w => `<div class="calendar-weekday">${w}</div>`).join('');
+        for (let i = 0; i < startWeekday; i++) html += `<div class="calendar-day empty"></div>`;
+        for (let d = 1; d <= daysInMonth; d++) {
+            let dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            let pnl = dailyPnlMap.get(dateStr) || 0;
+            let pnlColor = pnl>=0 ? 'profit' : 'loss';
+            let pnlText = pnl===0 ? '' : (pnl>=0?`+${pnl.toFixed(2)}`:`${pnl.toFixed(2)}`);
+            let isToday = (dateStr === todayStr);
+            html += `<div class="calendar-day ${isToday ? 'today' : ''}" data-date="${dateStr}">
+                        <div>${d}</div>
+                        <div class="day-profit ${pnlColor}">${pnlText}</div>
+                    </div>`;
+        }
+        document.getElementById('calendarGrid').innerHTML = html;
+        document.querySelectorAll('.calendar-day:not(.empty)').forEach(dayDiv => {
+            dayDiv.addEventListener('click', () => {
+                let dateStr = dayDiv.getAttribute('data-date');
+                let details = window.realizedDetails || [];
+                let filtered = details.filter(d => d.closedDate.slice(0,10) === dateStr);
+                if (filtered.length === 0) { alert(`${dateStr} 无交易记录`); return; }
+                let total = filtered.reduce((s,r)=>s+r.pnl,0);
+                let msg = `${dateStr} 收益: ${total>=0?'+':''}${total.toFixed(2)}\n\n详细交易:\n`;
+                for (let d of filtered) msg += `${d.stockCode} 数量:${d.qty} 盈亏:${d.pnl>=0?'+':''}${d.pnl.toFixed(2)}\n`;
+                alert(msg);
+            });
+        });
+    }
+
+    function prevMonth() {
+        if (currentCalendarMonth === 0) { currentCalendarMonth = 11; currentCalendarYear--; }
+        else currentCalendarMonth--;
+        renderCalendar();
+    }
+    function nextMonth() {
+        if (currentCalendarMonth === 11) { currentCalendarMonth = 0; currentCalendarYear++; }
+        else currentCalendarMonth++;
+        renderCalendar();
+    }
+    function openPeriodModal() {
+        document.getElementById('periodModal').classList.add('active');
+        renderCalendar();
+    }
+    function closePeriodModal() { document.getElementById('periodModal').classList.remove('active'); }
+
+    // 辅助函数
+    window.deleteTrade = (idx) => { trades.splice(idx, 1); refreshUI(); };
+    function deleteHoldPosition(idx) { holdPositions.splice(idx, 1); refreshUI(); }
+    function updateInitPositionTable() {
+        let tbody = document.getElementById('initPositionTbody');
+        if (holdPositions.length===0) tbody.innerHTML = '<td><td colspan="7">暂无底仓</tbody>';
+        else {
+            tbody.innerHTML = holdPositions.map((p,idx)=>`
+                <tr>
+                    <td>${p.stockCode}</td>
+                    <td>${p.stockName}</td>
+                    <td>${p.side==='long'?'多头':'空头'}</td>
+                    <td>${p.quantity}</td>
+                    <td>${p.price.toFixed(2)}</td>
+                    <td>${p.openDate}</td>
+                    <td><button class="delete-icon" onclick="deleteHoldPosition(${idx})">删</button></td>
+                </tr>
+            `).join('');
+        }
+    }
+    function resetAll() {
+        if (confirm('⚠️ 重置将清空所有交易、底仓、股价缓存。确定吗？')) {
+            trades = [];
+            holdPositions = [];
+            stockPrices = {};
+            stockNames = {};
+            refreshUI();
+            updateInitPositionTable();
+        }
+    }
+    async function updateAllStockPrices() {
+        const { positionRows } = computeAll();
+        const codes = [...new Set(positionRows.map(p => p.code))];
+        if (codes.length === 0) { alert('暂无持仓股票'); return; }
+        const btn = document.getElementById('updateAllPricesBtn');
+        const originalText = btn.innerText;
+        btn.innerText = '⏳ 更新中...';
+        btn.classList.add('loading');
+        let successCount = 0;
+        for (let code of codes) {
+            let res = await fetchEastMoney(code);
+            if (res && res.price) {
+                stockPrices[code] = res.price;
+                if (res.name && !stockNames[code]) stockNames[code] = res.name;
+                successCount++;
+            }
+            await new Promise(r => setTimeout(r, 200));
+        }
+        btn.innerText = originalText;
+        btn.classList.remove('loading');
+        refreshUI();
+        alert(`成功更新 ${successCount}/${codes.length} 只股票现价`);
+    }
+
+    // 事件绑定
+    document.getElementById('openSettingsBtn').addEventListener('click',()=>{
+        document.getElementById('settingsModal').classList.add('active');
+        updateInitPositionTable();
+    });
+    document.getElementById('closeModalBtn').addEventListener('click',()=>{
+        document.getElementById('settingsModal').classList.remove('active');
+    });
+    document.getElementById('applySettingsBtn').addEventListener('click',()=>refreshUI());
+    document.getElementById('addInitPositionBtn').addEventListener('click',()=>{
+        let code = document.getElementById('initCode').value.trim();
+        let name = document.getElementById('initName').value.trim();
+        let side = document.getElementById('initSide').value;
+        let qty = parseInt(document.getElementById('initQty').value);
+        let price = parseFloat(document.getElementById('initPrice').value);
+        let date = document.getElementById('initDate').value;
+        if (!code || isNaN(qty) || isNaN(price) || !date) { alert('请完整填写底仓信息'); return; }
+        holdPositions.push({ stockCode:code, stockName:name||code, side, quantity:qty, price, openDate:date });
+        refreshUI();
+        updateInitPositionTable();
+    });
+    document.getElementById('addTradeBtn').addEventListener('click', async ()=>{
+        let code = document.getElementById('stockCode').value.trim();
+        let name = document.getElementById('stockName').value.trim();
+        let side = document.getElementById('tradeSide').value;
+        let price = parseFloat(document.getElementById('tradePrice').value);
+        let qty = parseInt(document.getElementById('tradeQty').value);
+        let date = document.getElementById('tradeDate').value;
+        if (!date) date = new Date().toISOString().slice(0,16);
+        if (isNaN(price)||isNaN(qty)) { alert('价格/数量无效'); return; }
+        if (!name) {
+            try {
+                let res = await fetchEastMoney(code);
+                if (res && res.name) name = res.name;
+                else name = code;
+            } catch(e) { name = code; }
+        }
+        trades.push({ id:Date.now(), stockCode:code, stockName:name, side, price, quantity:qty, date });
+        refreshUI();
+    });
+    document.getElementById('clearAllTrades').addEventListener('click',()=>{ trades=[]; refreshUI(); });
+    document.getElementById('resetAllData').addEventListener('click', resetAll);
+    document.getElementById('updateAllPricesBtn').addEventListener('click', updateAllStockPrices);
+    document.getElementById('fetchNameOnlyBtn').addEventListener('click', async ()=>{
+        let code = document.getElementById('stockCode').value.trim();
+        if (!code) return;
+        let res = await fetchEastMoney(code);
+        if(res && res.name) document.getElementById('stockName').value = res.name;
+        else alert('获取名称失败');
+    });
+    document.getElementById('genGitBtn').addEventListener('click',()=>{
+        document.getElementById('gitUrlDisplay').innerHTML = `<a href="https://github.com/yourname/astock-trade-analyzer" target="_blank">📦 GitHub 项目仓库</a> | 底仓独立 · 动态成本 · 一键更新股价`;
+    });
+    document.getElementById('openPeriodModalBtn').addEventListener('click', openPeriodModal);
+    document.getElementById('closePeriodModalBtn').addEventListener('click', closePeriodModal);
+    document.getElementById('prevMonthBtn').addEventListener('click', prevMonth);
+    document.getElementById('nextMonthBtn').addEventListener('click', nextMonth);
+
+    // 标签页切换
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+            const tabId = btn.getAttribute('data-tab');
+            if (tabId === 'position') document.getElementById('positionPane').classList.add('active');
+            else if (tabId === 'stat') document.getElementById('statPane').classList.add('active');
+            else if (tabId === 'log') document.getElementById('logPane').classList.add('active');
+        });
+    });
+
+    refreshUI();
+</script>
+</body>
+</html>
